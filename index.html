@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Крипто-курсы и новости</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <h1>Крипто-курсы и новости</h1>
+      <p class="subtitle">BTC, ETH, SOL + свежие новости рынка</p>
+      <div class="meta">
+        <span id="updatedAt">Обновление: —</span>
+        <button id="refreshBtn" type="button">Обновить</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Курсы (USDT)</h2>
+      <div id="prices" class="prices-grid">
+        <article class="price-item" data-symbol="BTCUSDT">
+          <h3>BTC</h3>
+          <p class="price">—</p>
+          <p class="change">—</p>
+        </article>
+        <article class="price-item" data-symbol="ETHUSDT">
+          <h3>ETH</h3>
+          <p class="price">—</p>
+          <p class="change">—</p>
+        </article>
+        <article class="price-item" data-symbol="SOLUSDT">
+          <h3>SOL</h3>
+          <p class="price">—</p>
+          <p class="change">—</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Новости</h2>
+      <ul id="newsList" class="news-list">
+        <li>Загрузка новостей...</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
