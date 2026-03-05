@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Онлайн крипто-дашборд: курсы BTC, ETH, SOL, мини-графики тренда и новости рынка в реальном времени." />
+  <meta name="description" content="Онлайн крипто-дашборд: курсы, watchlist, портфель, мини-графики и новости рынка в реальном времени." />
   <title>Crypto Pulse — курсы и новости</title>
   <link rel="preconnect" href="https://api.binance.com" />
   <link rel="preconnect" href="https://min-api.cryptocompare.com" />
@@ -18,7 +18,7 @@
       <div>
         <p class="eyebrow">CRYPTO DASHBOARD</p>
         <h1>Crypto Pulse</h1>
-        <p class="subtitle">BTC, ETH, SOL + новости рынка и живой тренд за 24ч</p>
+        <p class="subtitle">Курсы, watchlist, портфель и новости в одном месте</p>
       </div>
 
       <div class="meta-wrap">
@@ -26,6 +26,7 @@
           <span id="updatedAt">Обновление: —</span>
           <span id="nextRefresh" class="chip">Следующее обновление: —</span>
           <span id="statusBadge" class="chip chip-status">Статус: загрузка…</span>
+          <span id="portfolioTotal" class="chip">Портфель: —</span>
         </div>
         <div class="actions">
           <button id="refreshBtn" type="button">Обновить сейчас</button>
@@ -40,46 +41,12 @@
         <span class="chip">Таймфрейм графика: 24ч</span>
       </div>
 
-      <div id="prices" class="prices-grid">
-        <article class="price-item" data-symbol="BTCUSDT">
-          <div class="row">
-            <h3>BTC</h3>
-            <span class="symbol">BTCUSDT</span>
-          </div>
-          <p class="price">—</p>
-          <p class="change">—</p>
-          <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-            <polyline points="" />
-          </svg>
-          <div class="change-bar" aria-hidden="true"><span></span></div>
-        </article>
-
-        <article class="price-item" data-symbol="ETHUSDT">
-          <div class="row">
-            <h3>ETH</h3>
-            <span class="symbol">ETHUSDT</span>
-          </div>
-          <p class="price">—</p>
-          <p class="change">—</p>
-          <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-            <polyline points="" />
-          </svg>
-          <div class="change-bar" aria-hidden="true"><span></span></div>
-        </article>
-
-        <article class="price-item" data-symbol="SOLUSDT">
-          <div class="row">
-            <h3>SOL</h3>
-            <span class="symbol">SOLUSDT</span>
-          </div>
-          <p class="price">—</p>
-          <p class="change">—</p>
-          <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-            <polyline points="" />
-          </svg>
-          <div class="change-bar" aria-hidden="true"><span></span></div>
-        </article>
+      <div class="watchlist-controls">
+        <input id="symbolInput" type="text" placeholder="Добавить монету: например ADA, XRP, DOGE" aria-label="Добавить монету" />
+        <button id="addSymbolBtn" type="button">Добавить</button>
       </div>
+
+      <div id="prices" class="prices-grid"></div>
     </section>
 
     <section class="card">

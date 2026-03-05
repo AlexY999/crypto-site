@@ -1,38 +1,61 @@
-const symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
+const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
 
 const pricesContainer = document.getElementById("prices");
 const newsList = document.getElementById("newsList");
 const newsFilterInput = document.getElementById("newsFilter");
 const newsCount = document.getElementById("newsCount");
-const fngValue = document.getElementById("fngValue");
-const fngLabel = document.getElementById("fngLabel");
-const topGainers = document.getElementById("topGainers");
-const topLosers = document.getElementById("topLosers");
 const updatedAt = document.getElementById("updatedAt");
 const nextRefresh = document.getElementById("nextRefresh");
 const statusBadge = document.getElementById("statusBadge");
 const refreshBtn = document.getElementById("refreshBtn");
 const autoRefreshBtn = document.getElementById("autoRefreshBtn");
+const portfolioTotal = document.getElementById("portfolioTotal");
+const symbolInput = document.getElementById("symbolInput");
+const addSymbolBtn = document.getElementById("addSymbolBtn");
+
+const fngValue = document.getElementById("fngValue");
+const fngLabel = document.getElementById("fngLabel");
+const topGainers = document.getElementById("topGainers");
+const topLosers = document.getElementById("topLosers");
 
 const PRICE_REFRESH_MS = 60_000;
 const NEWS_REFRESH_MS = 300_000;
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 12_000;
 
-const fmtPrice = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+const fmtPrice = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+let symbols = loadJSON("watchlist", DEFAULT_SYMBOLS);
+let holdings = loadJSON("holdings", {});
+let tickerMap = {};
+let latestNews = [];
 
 let nextRefreshAt = Date.now() + PRICE_REFRESH_MS;
 let autoRefreshEnabled = true;
+let priceRefreshInFlight = false;
 let priceInterval;
 let newsInterval;
-let latestNews = [];
-let priceRefreshInFlight = false;
 
-function formatChange(change) {
-  const sign = change >= 0 ? "+" : "";
-  return `${sign}${change.toFixed(2)}%`;
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeSymbol(input) {
+  const raw = input.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!raw) return "";
+  return raw.endsWith("USDT") ? raw : `${raw}USDT`;
+}
+
+function displaySymbol(symbol) {
+  return symbol.replace("USDT", "");
 }
 
 function setStatus(ok, message) {
@@ -46,8 +69,7 @@ function scheduleNextPriceRefresh() {
 }
 
 function markUpdated() {
-  const now = new Date();
-  updatedAt.textContent = `Обновление: ${now.toLocaleString("ru-RU")}`;
+  updatedAt.textContent = `Обновление: ${new Date().toLocaleString("ru-RU")}`;
   scheduleNextPriceRefresh();
 }
 
@@ -57,17 +79,14 @@ function startCountdown() {
       nextRefresh.textContent = "Следующее обновление: пауза";
       return;
     }
-
     const leftMs = Math.max(0, nextRefreshAt - Date.now());
-    const seconds = Math.ceil(leftMs / 1000);
-    nextRefresh.textContent = `Следующее обновление: ${seconds}с`;
+    nextRefresh.textContent = `Следующее обновление: ${Math.ceil(leftMs / 1000)}с`;
   }, 1000);
 }
 
 async function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -77,101 +96,121 @@ async function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
   }
 }
 
-function drawSparkline(el, points, isUp) {
-  if (!points?.length) return;
+function createCard(symbol) {
+  const article = document.createElement("article");
+  article.className = "price-item";
+  article.dataset.symbol = symbol;
 
+  article.innerHTML = `
+    <div class="row">
+      <h3>${displaySymbol(symbol)}</h3>
+      <div class="row" style="gap:6px">
+        <span class="symbol">${symbol}</span>
+        ${symbols.length > 1 ? `<button class="remove-btn" data-remove="${symbol}" type="button">✕</button>` : ""}
+      </div>
+    </div>
+    <p class="price">—</p>
+    <p class="change">—</p>
+    <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg>
+    <div class="change-bar" aria-hidden="true"><span></span></div>
+    <div class="holding-row">
+      <label for="holding-${symbol}">Количество:</label>
+      <input id="holding-${symbol}" data-holding="${symbol}" type="number" min="0" step="any" placeholder="0" value="${holdings[symbol] ?? ""}" />
+    </div>
+    <p class="holding-value" data-holding-value="${symbol}">Стоимость: —</p>
+  `;
+
+  return article;
+}
+
+function renderPriceCards() {
+  pricesContainer.innerHTML = "";
+  symbols.forEach((symbol) => pricesContainer.appendChild(createCard(symbol)));
+}
+
+function drawSparkline(el, points, isUp) {
+  if (!el || !points?.length) return;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = Math.max(max - min, 1e-9);
 
-  const toPoint = (value, idx) => {
-    const x = (idx / (points.length - 1 || 1)) * 100;
-    const y = 30 - ((value - min) / range) * 30;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  };
-
+  const toPoint = (v, i) => `${((i / (points.length - 1 || 1)) * 100).toFixed(2)},${(30 - ((v - min) / range) * 30).toFixed(2)}`;
   const polyline = el.querySelector(".sparkline polyline");
   polyline.setAttribute("points", points.map(toPoint).join(" "));
   polyline.classList.remove("up", "down");
   polyline.classList.add(isUp ? "up" : "down");
 }
 
+function updatePortfolioSummary() {
+  let total = 0;
+  symbols.forEach((symbol) => {
+    const qty = Number(holdings[symbol] || 0);
+    const price = Number(tickerMap[symbol]?.lastPrice || 0);
+    total += qty * price;
+
+    const valEl = document.querySelector(`[data-holding-value="${symbol}"]`);
+    if (valEl) {
+      valEl.textContent = qty > 0 ? `Стоимость: $${fmtPrice.format(qty * price)}` : "Стоимость: —";
+    }
+  });
+
+  portfolioTotal.textContent = `Портфель: $${fmtPrice.format(total)}`;
+}
+
 function applyTicker(ticker) {
+  tickerMap[ticker.symbol] = ticker;
   const el = pricesContainer.querySelector(`[data-symbol="${ticker.symbol}"]`);
   if (!el) return;
 
   const price = Number(ticker.lastPrice);
   const change = Number(ticker.priceChangePercent);
 
-  const priceEl = el.querySelector(".price");
+  el.querySelector(".price").textContent = `$${fmtPrice.format(price)}`;
+
   const changeEl = el.querySelector(".change");
-  const bar = el.querySelector(".change-bar span");
-
-  priceEl.textContent = `$${fmtPrice.format(price)}`;
-  changeEl.textContent = `24ч: ${formatChange(change)}`;
-
+  changeEl.textContent = `24ч: ${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
   changeEl.classList.remove("up", "down");
   changeEl.classList.add(change >= 0 ? "up" : "down");
 
-  const intensity = Math.min(Math.abs(change), 10) * 10;
+  const bar = el.querySelector(".change-bar span");
   bar.classList.remove("up", "down");
   bar.classList.add(change >= 0 ? "up" : "down");
-  bar.style.width = `${intensity}%`;
+  bar.style.width = `${Math.min(Math.abs(change), 10) * 10}%`;
 }
 
 async function fetchSparkline(symbol) {
-  const data = await fetchWithTimeout(
-    `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`
-  );
-
-  return data.map((candle) => Number(candle[4]));
+  const data = await fetchWithTimeout(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`);
+  return data.map((x) => Number(x[4]));
 }
 
 async function fetchPrices() {
-  const tickers = await Promise.all(
-    symbols.map((symbol) => fetchWithTimeout(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`))
-  );
-
+  const tickers = await Promise.all(symbols.map((s) => fetchWithTimeout(`https://api.binance.com/api/v3/ticker/24hr?symbol=${s}`)));
   tickers.forEach(applyTicker);
 
-  const sparklineData = await Promise.all(symbols.map((symbol) => fetchSparkline(symbol)));
-  symbols.forEach((symbol, idx) => {
+  const lines = await Promise.all(symbols.map((s) => fetchSparkline(s).catch(() => [])));
+  symbols.forEach((symbol, i) => {
     const el = pricesContainer.querySelector(`[data-symbol="${symbol}"]`);
-    const ticker = tickers.find((t) => t.symbol === symbol);
-    const isUp = Number(ticker?.priceChangePercent || 0) >= 0;
-    drawSparkline(el, sparklineData[idx], isUp);
+    const isUp = Number(tickerMap[symbol]?.priceChangePercent || 0) >= 0;
+    drawSparkline(el, lines[i], isUp);
   });
 
-  localStorage.setItem("cachedPrices", JSON.stringify(tickers));
-  localStorage.setItem("cachedSparklines", JSON.stringify(Object.fromEntries(symbols.map((s, i) => [s, sparklineData[i]]))));
+  saveJSON("cachedPrices", tickers);
+  saveJSON("cachedSparklines", Object.fromEntries(symbols.map((s, i) => [s, lines[i]])));
+  updatePortfolioSummary();
 }
 
 function renderCachedPrices() {
-  const raw = localStorage.getItem("cachedPrices");
-  const sparkRaw = localStorage.getItem("cachedSparklines");
+  const cached = loadJSON("cachedPrices", []);
+  const lines = loadJSON("cachedSparklines", {});
 
-  if (raw) {
-    try {
-      const items = JSON.parse(raw);
-      items.forEach(applyTicker);
-    } catch (e) {
-      console.warn("Не удалось прочитать кеш цен", e);
-    }
-  }
+  cached.forEach(applyTicker);
+  symbols.forEach((symbol) => {
+    const el = pricesContainer.querySelector(`[data-symbol="${symbol}"]`);
+    const isUp = el?.querySelector(".change")?.classList.contains("up");
+    drawSparkline(el, lines[symbol], isUp);
+  });
 
-  if (sparkRaw) {
-    try {
-      const sparkMap = JSON.parse(sparkRaw);
-      symbols.forEach((symbol) => {
-        const el = pricesContainer.querySelector(`[data-symbol="${symbol}"]`);
-        const points = sparkMap[symbol];
-        const isUp = el.querySelector(".change")?.classList.contains("up");
-        drawSparkline(el, points, isUp);
-      });
-    } catch (e) {
-      console.warn("Не удалось прочитать кеш графиков", e);
-    }
-  }
+  updatePortfolioSummary();
 }
 
 function renderNews(items) {
@@ -180,98 +219,68 @@ function renderNews(items) {
     newsCount.textContent = "0 новостей";
     return;
   }
-
   const q = newsFilterInput.value.trim().toLowerCase();
-  const filtered = q
-    ? items.filter((item) => `${item.title} ${item.source}`.toLowerCase().includes(q))
-    : items;
-
+  const filtered = q ? items.filter((n) => `${n.title} ${n.source}`.toLowerCase().includes(q)) : items;
   newsCount.textContent = `${filtered.length} новостей`;
-
-  if (!filtered.length) {
-    newsList.innerHTML = "<li>По текущему фильтру ничего не найдено.</li>";
-    return;
-  }
-
-  newsList.innerHTML = filtered
-    .map(
-      (item) =>
-        `<li><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a> <small>— ${item.source}</small></li>`
-    )
-    .join("");
-}
-
-async function fetchMarketPulse() {
-  try {
-    const fng = await fetchWithTimeout("https://api.alternative.me/fng/?limit=1");
-    const point = fng?.data?.[0];
-    if (point) {
-      fngValue.textContent = `${point.value}/100`;
-      fngLabel.textContent = point.value_classification || "—";
-    }
-  } catch (e) {
-    console.warn("Fear & Greed недоступен", e);
-  }
-
-  try {
-    const tickers = await fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr");
-    const usdt = tickers.filter((t) => t.symbol.endsWith("USDT") && !t.symbol.includes("UPUSDT") && !t.symbol.includes("DOWNUSDT"));
-
-    const sorted = usdt
-      .map((t) => ({ symbol: t.symbol.replace("USDT", ""), change: Number(t.priceChangePercent) }))
-      .filter((t) => Number.isFinite(t.change));
-
-    const gainers = [...sorted].sort((a, b) => b.change - a.change).slice(0, 3);
-    const losers = [...sorted].sort((a, b) => a.change - b.change).slice(0, 3);
-
-    topGainers.innerHTML = gainers.map((x) => `<li><strong>${x.symbol}</strong> <span class="up">+${x.change.toFixed(2)}%</span></li>`).join("");
-    topLosers.innerHTML = losers.map((x) => `<li><strong>${x.symbol}</strong> <span class="down">${x.change.toFixed(2)}%</span></li>`).join("");
-  } catch (e) {
-    console.warn("Top movers недоступны", e);
-    topGainers.innerHTML = "<li>Нет данных</li>";
-    topLosers.innerHTML = "<li>Нет данных</li>";
-  }
+  newsList.innerHTML = filtered.length
+    ? filtered.map((n) => `<li><a href="${n.url}" target="_blank" rel="noopener noreferrer">${n.title}</a> <small>— ${n.source}</small></li>`).join("")
+    : "<li>По текущему фильтру ничего не найдено.</li>";
 }
 
 async function fetchNews() {
   const json = await fetchWithTimeout("https://min-api.cryptocompare.com/data/v2/news/?lang=EN");
   latestNews = (json.Data || []).slice(0, 12);
   renderNews(latestNews);
-  localStorage.setItem("cachedNews", JSON.stringify(latestNews));
+  saveJSON("cachedNews", latestNews);
 }
 
 function renderCachedNews() {
-  const raw = localStorage.getItem("cachedNews");
-  if (!raw) return;
+  latestNews = loadJSON("cachedNews", []);
+  if (latestNews.length) renderNews(latestNews);
+}
+
+async function fetchMarketPulse() {
+  try {
+    const fng = await fetchWithTimeout("https://api.alternative.me/fng/?limit=1");
+    const p = fng?.data?.[0];
+    if (p) {
+      fngValue.textContent = `${p.value}/100`;
+      fngLabel.textContent = p.value_classification || "—";
+    }
+  } catch {}
 
   try {
-    latestNews = JSON.parse(raw).slice(0, 12);
-    renderNews(latestNews);
-  } catch (e) {
-    console.warn("Не удалось прочитать кеш новостей", e);
+    const tickers = await fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr");
+    const usdt = tickers.filter((t) => t.symbol.endsWith("USDT") && !t.symbol.includes("UPUSDT") && !t.symbol.includes("DOWNUSDT"));
+    const sorted = usdt.map((t) => ({ symbol: displaySymbol(t.symbol), change: Number(t.priceChangePercent) })).filter((x) => Number.isFinite(x.change));
+
+    const gainers = [...sorted].sort((a, b) => b.change - a.change).slice(0, 3);
+    const losers = [...sorted].sort((a, b) => a.change - b.change).slice(0, 3);
+
+    topGainers.innerHTML = gainers.map((x) => `<li><strong>${x.symbol}</strong> <span class="up">+${x.change.toFixed(2)}%</span></li>`).join("");
+    topLosers.innerHTML = losers.map((x) => `<li><strong>${x.symbol}</strong> <span class="down">${x.change.toFixed(2)}%</span></li>`).join("");
+  } catch {
+    topGainers.innerHTML = "<li>Нет данных</li>";
+    topLosers.innerHTML = "<li>Нет данных</li>";
   }
 }
 
 function setAutoRefresh(enabled) {
   autoRefreshEnabled = enabled;
   autoRefreshBtn.textContent = `Авто: ${enabled ? "ВКЛ" : "ВЫКЛ"}`;
-
   clearInterval(priceInterval);
   clearInterval(newsInterval);
 
   if (enabled) {
     scheduleNextPriceRefresh();
-
     priceInterval = setInterval(async () => {
       if (priceRefreshInFlight) return;
       priceRefreshInFlight = true;
-
       try {
         await fetchPrices();
         markUpdated();
         setStatus(true, "онлайн");
-      } catch (e) {
-        console.error(e);
+      } catch {
         setStatus(false, "ошибка сети");
         scheduleNextPriceRefresh();
       } finally {
@@ -280,10 +289,7 @@ function setAutoRefresh(enabled) {
     }, PRICE_REFRESH_MS);
 
     newsInterval = setInterval(() => {
-      Promise.all([fetchNews(), fetchMarketPulse()]).catch((e) => {
-        console.error(e);
-        setStatus(false, "ошибка сети");
-      });
+      Promise.all([fetchNews(), fetchMarketPulse()]).catch(() => setStatus(false, "ошибка сети"));
     }, NEWS_REFRESH_MS);
   }
 }
@@ -291,19 +297,14 @@ function setAutoRefresh(enabled) {
 async function refreshAll() {
   refreshBtn.disabled = true;
   refreshBtn.textContent = "Обновляю...";
-
   try {
     priceRefreshInFlight = true;
     await Promise.all([fetchPrices(), fetchNews(), fetchMarketPulse()]);
     markUpdated();
     setStatus(true, "онлайн");
-  } catch (e) {
-    console.error(e);
+  } catch {
     setStatus(false, "ошибка загрузки");
     scheduleNextPriceRefresh();
-    if (!newsList.children.length) {
-      newsList.innerHTML = "<li>Ошибка загрузки данных. Попробуй обновить позже.</li>";
-    }
   } finally {
     priceRefreshInFlight = false;
     refreshBtn.disabled = false;
@@ -311,10 +312,60 @@ async function refreshAll() {
   }
 }
 
+function addSymbol() {
+  const symbol = normalizeSymbol(symbolInput.value);
+  if (!symbol) return;
+  if (symbols.includes(symbol)) {
+    symbolInput.value = "";
+    return;
+  }
+
+  symbols.push(symbol);
+  saveJSON("watchlist", symbols);
+  symbolInput.value = "";
+  renderPriceCards();
+  bindDynamicEvents();
+  fetchPrices().catch(() => setStatus(false, "ошибка сети"));
+}
+
+function removeSymbol(symbol) {
+  if (symbols.length <= 1) return;
+  symbols = symbols.filter((s) => s !== symbol);
+  delete holdings[symbol];
+  delete tickerMap[symbol];
+  saveJSON("watchlist", symbols);
+  saveJSON("holdings", holdings);
+  renderPriceCards();
+  bindDynamicEvents();
+  updatePortfolioSummary();
+}
+
+function bindDynamicEvents() {
+  pricesContainer.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => removeSymbol(btn.dataset.remove));
+  });
+
+  pricesContainer.querySelectorAll("[data-holding]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const symbol = input.dataset.holding;
+      const val = Number(input.value);
+      holdings[symbol] = Number.isFinite(val) && val > 0 ? val : 0;
+      saveJSON("holdings", holdings);
+      updatePortfolioSummary();
+    });
+  });
+}
+
 refreshBtn.addEventListener("click", refreshAll);
 autoRefreshBtn.addEventListener("click", () => setAutoRefresh(!autoRefreshEnabled));
 newsFilterInput.addEventListener("input", () => renderNews(latestNews));
+addSymbolBtn.addEventListener("click", addSymbol);
+symbolInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addSymbol();
+});
 
+renderPriceCards();
+bindDynamicEvents();
 renderCachedPrices();
 renderCachedNews();
 startCountdown();
