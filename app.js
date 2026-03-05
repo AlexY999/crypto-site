@@ -12,6 +12,11 @@ const autoRefreshBtn = document.getElementById("autoRefreshBtn");
 const portfolioTotal = document.getElementById("portfolioTotal");
 const symbolInput = document.getElementById("symbolInput");
 const addSymbolBtn = document.getElementById("addSymbolBtn");
+const alertSymbol = document.getElementById("alertSymbol");
+const alertDirection = document.getElementById("alertDirection");
+const alertPrice = document.getElementById("alertPrice");
+const addAlertBtn = document.getElementById("addAlertBtn");
+const alertsList = document.getElementById("alertsList");
 
 const fngValue = document.getElementById("fngValue");
 const fngLabel = document.getElementById("fngLabel");
@@ -26,6 +31,8 @@ const fmtPrice = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maxi
 
 let symbols = loadJSON("watchlist", DEFAULT_SYMBOLS);
 let holdings = loadJSON("holdings", {});
+let avgCosts = loadJSON("avgCosts", {});
+let alerts = loadJSON("priceAlerts", []);
 let tickerMap = {};
 let latestNews = [];
 
@@ -113,11 +120,12 @@ function createCard(symbol) {
     <p class="change">—</p>
     <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg>
     <div class="change-bar" aria-hidden="true"><span></span></div>
-    <div class="holding-row">
-      <label for="holding-${symbol}">Количество:</label>
-      <input id="holding-${symbol}" data-holding="${symbol}" type="number" min="0" step="any" placeholder="0" value="${holdings[symbol] ?? ""}" />
+    <div class="holding-grid">
+      <input id="holding-${symbol}" data-holding="${symbol}" type="number" min="0" step="any" placeholder="Количество" value="${holdings[symbol] ?? ""}" />
+      <input id="avg-${symbol}" data-avg="${symbol}" type="number" min="0" step="any" placeholder="Средняя цена входа" value="${avgCosts[symbol] ?? ""}" />
     </div>
     <p class="holding-value" data-holding-value="${symbol}">Стоимость: —</p>
+    <p class="holding-pnl" data-holding-pnl="${symbol}">PnL: —</p>
   `;
 
   return article;
@@ -143,18 +151,37 @@ function drawSparkline(el, points, isUp) {
 
 function updatePortfolioSummary() {
   let total = 0;
+  let totalPnl = 0;
+
   symbols.forEach((symbol) => {
     const qty = Number(holdings[symbol] || 0);
     const price = Number(tickerMap[symbol]?.lastPrice || 0);
-    total += qty * price;
+    const avg = Number(avgCosts[symbol] || 0);
+    const positionValue = qty * price;
+    const pnl = qty > 0 && avg > 0 ? (price - avg) * qty : 0;
+
+    total += positionValue;
+    totalPnl += pnl;
 
     const valEl = document.querySelector(`[data-holding-value="${symbol}"]`);
-    if (valEl) {
-      valEl.textContent = qty > 0 ? `Стоимость: $${fmtPrice.format(qty * price)}` : "Стоимость: —";
+    const pnlEl = document.querySelector(`[data-holding-pnl="${symbol}"]`);
+
+    if (valEl) valEl.textContent = qty > 0 ? `Стоимость: $${fmtPrice.format(positionValue)}` : "Стоимость: —";
+    if (pnlEl) {
+      if (qty > 0 && avg > 0) {
+        const sign = pnl >= 0 ? "+" : "";
+        pnlEl.textContent = `PnL: ${sign}$${fmtPrice.format(pnl)} (${avg > 0 ? ((price / avg - 1) * 100).toFixed(2) : "0.00"}%)`;
+        pnlEl.classList.toggle("up", pnl >= 0);
+        pnlEl.classList.toggle("down", pnl < 0);
+      } else {
+        pnlEl.textContent = "PnL: —";
+        pnlEl.classList.remove("up", "down");
+      }
     }
   });
 
-  portfolioTotal.textContent = `Портфель: $${fmtPrice.format(total)}`;
+  const sign = totalPnl >= 0 ? "+" : "";
+  portfolioTotal.textContent = `Портфель: $${fmtPrice.format(total)} | PnL: ${sign}$${fmtPrice.format(totalPnl)}`;
 }
 
 function applyTicker(ticker) {
@@ -197,6 +224,7 @@ async function fetchPrices() {
   saveJSON("cachedPrices", tickers);
   saveJSON("cachedSparklines", Object.fromEntries(symbols.map((s, i) => [s, lines[i]])));
   updatePortfolioSummary();
+  checkAlerts();
 }
 
 function renderCachedPrices() {
@@ -262,6 +290,61 @@ async function fetchMarketPulse() {
   } catch {
     topGainers.innerHTML = "<li>Нет данных</li>";
     topLosers.innerHTML = "<li>Нет данных</li>";
+  }
+}
+
+function renderAlerts() {
+  if (!alerts.length) {
+    alertsList.innerHTML = "<li>Нет активных алертов</li>";
+    return;
+  }
+
+  alertsList.innerHTML = alerts
+    .map((a) => `<li>${displaySymbol(a.symbol)} ${a.direction === "above" ? ">" : "<"} $${fmtPrice.format(a.price)} <button data-alert-remove="${a.id}" type="button">Удалить</button></li>`)
+    .join("");
+
+  alertsList.querySelectorAll("[data-alert-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      alerts = alerts.filter((a) => a.id !== btn.dataset.alertRemove);
+      saveJSON("priceAlerts", alerts);
+      renderAlerts();
+    });
+  });
+}
+
+function notifyAlert(message) {
+  if ("Notification" in window) {
+    if (Notification.permission === "granted") {
+      new Notification(message);
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((perm) => {
+        if (perm === "granted") new Notification(message);
+      });
+    }
+  }
+}
+
+function checkAlerts() {
+  if (!alerts.length) return;
+
+  const triggeredIds = [];
+  alerts.forEach((a) => {
+    const price = Number(tickerMap[a.symbol]?.lastPrice || 0);
+    if (!price) return;
+
+    const hit = a.direction === "above" ? price >= a.price : price <= a.price;
+    if (hit) {
+      const msg = `Алерт: ${displaySymbol(a.symbol)} ${a.direction === "above" ? "выше" : "ниже"} $${fmtPrice.format(a.price)} (сейчас $${fmtPrice.format(price)})`;
+      setStatus(true, msg);
+      notifyAlert(msg);
+      triggeredIds.push(a.id);
+    }
+  });
+
+  if (triggeredIds.length) {
+    alerts = alerts.filter((a) => !triggeredIds.includes(a.id));
+    saveJSON("priceAlerts", alerts);
+    renderAlerts();
   }
 }
 
@@ -332,11 +415,16 @@ function removeSymbol(symbol) {
   if (symbols.length <= 1) return;
   symbols = symbols.filter((s) => s !== symbol);
   delete holdings[symbol];
+  delete avgCosts[symbol];
   delete tickerMap[symbol];
+  alerts = alerts.filter((a) => a.symbol !== symbol);
   saveJSON("watchlist", symbols);
   saveJSON("holdings", holdings);
+  saveJSON("avgCosts", avgCosts);
+  saveJSON("priceAlerts", alerts);
   renderPriceCards();
   bindDynamicEvents();
+  renderAlerts();
   updatePortfolioSummary();
 }
 
@@ -354,18 +442,51 @@ function bindDynamicEvents() {
       updatePortfolioSummary();
     });
   });
+
+  pricesContainer.querySelectorAll("[data-avg]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const symbol = input.dataset.avg;
+      const val = Number(input.value);
+      avgCosts[symbol] = Number.isFinite(val) && val > 0 ? val : 0;
+      saveJSON("avgCosts", avgCosts);
+      updatePortfolioSummary();
+    });
+  });
+}
+
+function addPriceAlert() {
+  const symbol = normalizeSymbol(alertSymbol.value);
+  const target = Number(alertPrice.value);
+  const direction = alertDirection.value;
+
+  if (!symbol || !Number.isFinite(target) || target <= 0) return;
+
+  const id = `${symbol}-${direction}-${target}-${Date.now()}`;
+  alerts.push({ id, symbol, direction, price: target });
+  saveJSON("priceAlerts", alerts);
+  renderAlerts();
+
+  alertSymbol.value = "";
+  alertPrice.value = "";
 }
 
 refreshBtn.addEventListener("click", refreshAll);
 autoRefreshBtn.addEventListener("click", () => setAutoRefresh(!autoRefreshEnabled));
 newsFilterInput.addEventListener("input", () => renderNews(latestNews));
 addSymbolBtn.addEventListener("click", addSymbol);
+addAlertBtn.addEventListener("click", addPriceAlert);
 symbolInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addSymbol();
+});
+[alertSymbol, alertPrice].forEach((el) => {
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addPriceAlert();
+  });
 });
 
 renderPriceCards();
 bindDynamicEvents();
+renderAlerts();
 renderCachedPrices();
 renderCachedNews();
 startCountdown();

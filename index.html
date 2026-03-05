@@ -76,6 +76,24 @@
 
     <section class="card">
       <div class="row row-news">
+        <h2>Ценовые алерты</h2>
+        <span class="chip">Локальные уведомления в браузере</span>
+      </div>
+
+      <div class="alert-controls">
+        <input id="alertSymbol" type="text" placeholder="Символ: BTC" aria-label="Символ для алерта" />
+        <select id="alertDirection" aria-label="Направление алерта">
+          <option value="above">Выше</option>
+          <option value="below">Ниже</option>
+        </select>
+        <input id="alertPrice" type="number" min="0" step="any" placeholder="Цена, например 80000" aria-label="Цена алерта" />
+        <button id="addAlertBtn" type="button">Добавить алерт</button>
+      </div>
+      <ul id="alertsList" class="alerts-list"><li>Нет активных алертов</li></ul>
+    </section>
+
+    <section class="card">
+      <div class="row row-news">
         <h2>Новости</h2>
         <span class="chip">Источник: CryptoCompare</span>
       </div>

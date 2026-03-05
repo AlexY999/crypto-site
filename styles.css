@@ -114,16 +114,17 @@ h2 { margin: 4px 0 14px; }
 .change-bar span.up { background: linear-gradient(90deg, #2cbf84, #4be7a9); }
 .change-bar span.down { background: linear-gradient(90deg, #f05d6f, #ff7f91); }
 
-.holding-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.holding-row input {
-  width: 110px;
+.holding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.holding-grid input {
+  width: 100%;
   background: rgba(12, 18, 36, 0.8);
   color: var(--text);
   border: 1px solid rgba(109, 141, 255, 0.3);
   border-radius: 8px;
   padding: 7px 8px;
 }
-.holding-value { margin: 0; font-size: 0.88rem; color: #cdd6ff; }
+.holding-value { margin: 8px 0 0; font-size: 0.88rem; color: #cdd6ff; }
+.holding-pnl { margin: 4px 0 0; font-size: 0.88rem; }
 .remove-btn {
   background: rgba(255, 107, 122, 0.14);
   border: 1px solid rgba(255, 107, 122, 0.35);
@@ -138,6 +139,31 @@ h2 { margin: 4px 0 14px; }
 .market-caption { margin: 6px 0 0; color: var(--muted); }
 .market-list { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
 .market-list li { color: #dce3ff; }
+
+.alert-controls { display: grid; grid-template-columns: 1fr 140px 1fr auto; gap: 10px; margin-bottom: 10px; }
+.alert-controls input,
+.alert-controls select {
+  background: rgba(12, 18, 36, 0.8);
+  color: var(--text);
+  border: 1px solid rgba(109, 141, 255, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.alerts-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.alerts-list button {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  background: rgba(255, 107, 122, 0.14);
+  border: 1px solid rgba(255, 107, 122, 0.35);
+}
 
 .news-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .news-controls input {
@@ -163,4 +189,6 @@ h2 { margin: 4px 0 14px; }
   .actions { width: 100%; }
   .actions button { flex: 1; }
   .news-controls, .watchlist-controls { flex-direction: column; align-items: stretch; }
+  .alert-controls { grid-template-columns: 1fr; }
+  .holding-grid { grid-template-columns: 1fr; }
 }
