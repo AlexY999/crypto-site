@@ -4,6 +4,10 @@ const pricesContainer = document.getElementById("prices");
 const newsList = document.getElementById("newsList");
 const newsFilterInput = document.getElementById("newsFilter");
 const newsCount = document.getElementById("newsCount");
+const fngValue = document.getElementById("fngValue");
+const fngLabel = document.getElementById("fngLabel");
+const topGainers = document.getElementById("topGainers");
+const topLosers = document.getElementById("topLosers");
 const updatedAt = document.getElementById("updatedAt");
 const nextRefresh = document.getElementById("nextRefresh");
 const statusBadge = document.getElementById("statusBadge");
@@ -197,6 +201,38 @@ function renderNews(items) {
     .join("");
 }
 
+async function fetchMarketPulse() {
+  try {
+    const fng = await fetchWithTimeout("https://api.alternative.me/fng/?limit=1");
+    const point = fng?.data?.[0];
+    if (point) {
+      fngValue.textContent = `${point.value}/100`;
+      fngLabel.textContent = point.value_classification || "—";
+    }
+  } catch (e) {
+    console.warn("Fear & Greed недоступен", e);
+  }
+
+  try {
+    const tickers = await fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr");
+    const usdt = tickers.filter((t) => t.symbol.endsWith("USDT") && !t.symbol.includes("UPUSDT") && !t.symbol.includes("DOWNUSDT"));
+
+    const sorted = usdt
+      .map((t) => ({ symbol: t.symbol.replace("USDT", ""), change: Number(t.priceChangePercent) }))
+      .filter((t) => Number.isFinite(t.change));
+
+    const gainers = [...sorted].sort((a, b) => b.change - a.change).slice(0, 3);
+    const losers = [...sorted].sort((a, b) => a.change - b.change).slice(0, 3);
+
+    topGainers.innerHTML = gainers.map((x) => `<li><strong>${x.symbol}</strong> <span class="up">+${x.change.toFixed(2)}%</span></li>`).join("");
+    topLosers.innerHTML = losers.map((x) => `<li><strong>${x.symbol}</strong> <span class="down">${x.change.toFixed(2)}%</span></li>`).join("");
+  } catch (e) {
+    console.warn("Top movers недоступны", e);
+    topGainers.innerHTML = "<li>Нет данных</li>";
+    topLosers.innerHTML = "<li>Нет данных</li>";
+  }
+}
+
 async function fetchNews() {
   const json = await fetchWithTimeout("https://min-api.cryptocompare.com/data/v2/news/?lang=EN");
   latestNews = (json.Data || []).slice(0, 12);
@@ -244,7 +280,7 @@ function setAutoRefresh(enabled) {
     }, PRICE_REFRESH_MS);
 
     newsInterval = setInterval(() => {
-      fetchNews().catch((e) => {
+      Promise.all([fetchNews(), fetchMarketPulse()]).catch((e) => {
         console.error(e);
         setStatus(false, "ошибка сети");
       });
@@ -258,7 +294,7 @@ async function refreshAll() {
 
   try {
     priceRefreshInFlight = true;
-    await Promise.all([fetchPrices(), fetchNews()]);
+    await Promise.all([fetchPrices(), fetchNews(), fetchMarketPulse()]);
     markUpdated();
     setStatus(true, "онлайн");
   } catch (e) {

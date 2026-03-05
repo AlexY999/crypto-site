@@ -186,6 +186,46 @@ h2 { margin: 4px 0 14px; }
 
 .row-news { margin-bottom: 8px; }
 
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.market-box {
+  background: rgba(10, 14, 28, 0.7);
+  border: 1px solid rgba(92, 105, 160, 0.35);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.market-box h3 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.market-value {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.65rem;
+}
+
+.market-caption {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.market-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.market-list li { color: #dce3ff; }
+.market-list .up { color: var(--green); }
+.market-list .down { color: var(--red); }
+
 .news-controls {
   display: flex;
   gap: 10px;
