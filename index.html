@@ -3,17 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Крипто-курсы и новости</title>
+  <meta name="description" content="Онлайн крипто-дашборд: курсы BTC, ETH, SOL и свежие новости рынка в реальном времени." />
+  <title>Crypto Pulse — курсы и новости</title>
+  <link rel="preconnect" href="https://api.binance.com" />
+  <link rel="preconnect" href="https://min-api.cryptocompare.com" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="bg-glow bg-glow-1" aria-hidden="true"></div>
+  <div class="bg-glow bg-glow-2" aria-hidden="true"></div>
+
   <main class="container">
-    <header class="header">
-      <h1>Крипто-курсы и новости</h1>
-      <p class="subtitle">BTC, ETH, SOL + свежие новости рынка</p>
-      <div class="meta">
-        <span id="updatedAt">Обновление: —</span>
-        <button id="refreshBtn" type="button">Обновить</button>
+    <header class="header card">
+      <div>
+        <p class="eyebrow">CRYPTO DASHBOARD</p>
+        <h1>Crypto Pulse</h1>
+        <p class="subtitle">BTC, ETH, SOL + свежие новости рынка</p>
+      </div>
+
+      <div class="meta-wrap">
+        <div class="meta">
+          <span id="updatedAt">Обновление: —</span>
+          <span id="nextRefresh" class="chip">Следующее обновление: —</span>
+        </div>
+        <button id="refreshBtn" type="button">Обновить сейчас</button>
       </div>
     </header>
 
@@ -21,29 +34,50 @@
       <h2>Курсы (USDT)</h2>
       <div id="prices" class="prices-grid">
         <article class="price-item" data-symbol="BTCUSDT">
-          <h3>BTC</h3>
+          <div class="row">
+            <h3>BTC</h3>
+            <span class="symbol">BTCUSDT</span>
+          </div>
           <p class="price">—</p>
           <p class="change">—</p>
+          <div class="change-bar" aria-hidden="true"><span></span></div>
         </article>
+
         <article class="price-item" data-symbol="ETHUSDT">
-          <h3>ETH</h3>
+          <div class="row">
+            <h3>ETH</h3>
+            <span class="symbol">ETHUSDT</span>
+          </div>
           <p class="price">—</p>
           <p class="change">—</p>
+          <div class="change-bar" aria-hidden="true"><span></span></div>
         </article>
+
         <article class="price-item" data-symbol="SOLUSDT">
-          <h3>SOL</h3>
+          <div class="row">
+            <h3>SOL</h3>
+            <span class="symbol">SOLUSDT</span>
+          </div>
           <p class="price">—</p>
           <p class="change">—</p>
+          <div class="change-bar" aria-hidden="true"><span></span></div>
         </article>
       </div>
     </section>
 
     <section class="card">
-      <h2>Новости</h2>
+      <div class="row row-news">
+        <h2>Новости</h2>
+        <span class="chip">Источник: CryptoCompare</span>
+      </div>
       <ul id="newsList" class="news-list">
         <li>Загрузка новостей...</li>
       </ul>
     </section>
+
+    <footer class="footer">
+      <small>Данные не являются финансовой рекомендацией.</small>
+    </footer>
   </main>
 
   <script src="app.js"></script>
