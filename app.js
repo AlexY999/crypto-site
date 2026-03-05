@@ -262,6 +262,16 @@ async function fetchNews() {
   saveJSON("cachedNews", latestNews);
 }
 
+async function safeRun(fn, label) {
+  try {
+    await fn();
+    return { ok: true, label };
+  } catch (e) {
+    console.warn(`Ошибка в ${label}`, e);
+    return { ok: false, label, error: e };
+  }
+}
+
 function renderCachedNews() {
   latestNews = loadJSON("cachedNews", []);
   if (latestNews.length) renderNews(latestNews);
@@ -360,19 +370,28 @@ function setAutoRefresh(enabled) {
       if (priceRefreshInFlight) return;
       priceRefreshInFlight = true;
       try {
-        await fetchPrices();
-        markUpdated();
-        setStatus(true, "онлайн");
-      } catch {
-        setStatus(false, "ошибка сети");
-        scheduleNextPriceRefresh();
+        const priceRes = await safeRun(fetchPrices, "курсы");
+        if (priceRes.ok) {
+          markUpdated();
+          setStatus(true, "онлайн");
+        } else {
+          setStatus(false, "ошибка сети (курсы)");
+          scheduleNextPriceRefresh();
+        }
       } finally {
         priceRefreshInFlight = false;
       }
     }, PRICE_REFRESH_MS);
 
-    newsInterval = setInterval(() => {
-      Promise.all([fetchNews(), fetchMarketPulse()]).catch(() => setStatus(false, "ошибка сети"));
+    newsInterval = setInterval(async () => {
+      const [newsRes, pulseRes] = await Promise.all([
+        safeRun(fetchNews, "новости"),
+        safeRun(fetchMarketPulse, "пульс рынка"),
+      ]);
+
+      if (!newsRes.ok && !pulseRes.ok) {
+        setStatus(false, "ошибка сети (новости/пульс)");
+      }
     }, NEWS_REFRESH_MS);
   }
 }
@@ -380,14 +399,29 @@ function setAutoRefresh(enabled) {
 async function refreshAll() {
   refreshBtn.disabled = true;
   refreshBtn.textContent = "Обновляю...";
+
   try {
     priceRefreshInFlight = true;
-    await Promise.all([fetchPrices(), fetchNews(), fetchMarketPulse()]);
-    markUpdated();
-    setStatus(true, "онлайн");
-  } catch {
-    setStatus(false, "ошибка загрузки");
-    scheduleNextPriceRefresh();
+    const results = await Promise.all([
+      safeRun(fetchPrices, "курсы"),
+      safeRun(fetchNews, "новости"),
+      safeRun(fetchMarketPulse, "пульс рынка"),
+    ]);
+
+    const failed = results.filter((r) => !r.ok);
+    const okCount = results.length - failed.length;
+
+    if (okCount > 0) {
+      markUpdated();
+      if (failed.length === 0) {
+        setStatus(true, "онлайн");
+      } else {
+        setStatus(true, `частично онлайн (${failed.map((f) => f.label).join(", ")} недоступно)`);
+      }
+    } else {
+      setStatus(false, "ошибка загрузки");
+      scheduleNextPriceRefresh();
+    }
   } finally {
     priceRefreshInFlight = false;
     refreshBtn.disabled = false;
