@@ -41,11 +41,6 @@
         <span class="chip">Таймфрейм графика: 24ч</span>
       </div>
 
-      <div class="watchlist-controls">
-        <input id="symbolInput" type="text" placeholder="Добавить монету: например ADA, XRP, DOGE" aria-label="Добавить монету" />
-        <button id="addSymbolBtn" type="button">Добавить</button>
-      </div>
-
       <div id="prices" class="prices-grid"></div>
     </section>
 
@@ -72,24 +67,6 @@
           <ol id="topLosers" class="market-list"><li>Загрузка…</li></ol>
         </article>
       </div>
-    </section>
-
-    <section class="card">
-      <div class="row row-news">
-        <h2>Ценовые алерты</h2>
-        <span class="chip">Локальные уведомления в браузере</span>
-      </div>
-
-      <div class="alert-controls">
-        <input id="alertSymbol" type="text" placeholder="Символ: BTC" aria-label="Символ для алерта" />
-        <select id="alertDirection" aria-label="Направление алерта">
-          <option value="above">Выше</option>
-          <option value="below">Ниже</option>
-        </select>
-        <input id="alertPrice" type="number" min="0" step="any" placeholder="Цена, например 80000" aria-label="Цена алерта" />
-        <button id="addAlertBtn" type="button">Добавить алерт</button>
-      </div>
-      <ul id="alertsList" class="alerts-list"><li>Нет активных алертов</li></ul>
     </section>
 
     <section class="card">
