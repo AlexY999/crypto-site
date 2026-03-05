@@ -24,6 +24,7 @@ let autoRefreshEnabled = true;
 let priceInterval;
 let newsInterval;
 let latestNews = [];
+let priceRefreshInFlight = false;
 
 function formatChange(change) {
   const sign = change >= 0 ? "+" : "";
@@ -36,10 +37,14 @@ function setStatus(ok, message) {
   statusBadge.classList.add(ok ? "ok" : "error");
 }
 
+function scheduleNextPriceRefresh() {
+  nextRefreshAt = Date.now() + PRICE_REFRESH_MS;
+}
+
 function markUpdated() {
   const now = new Date();
   updatedAt.textContent = `Обновление: ${now.toLocaleString("ru-RU")}`;
-  nextRefreshAt = Date.now() + PRICE_REFRESH_MS;
+  scheduleNextPriceRefresh();
 }
 
 function startCountdown() {
@@ -215,13 +220,27 @@ function setAutoRefresh(enabled) {
   autoRefreshEnabled = enabled;
   autoRefreshBtn.textContent = `Авто: ${enabled ? "ВКЛ" : "ВЫКЛ"}`;
 
+  clearInterval(priceInterval);
+  clearInterval(newsInterval);
+
   if (enabled) {
-    nextRefreshAt = Date.now() + PRICE_REFRESH_MS;
-    priceInterval = setInterval(() => {
-      fetchPrices().catch((e) => {
+    scheduleNextPriceRefresh();
+
+    priceInterval = setInterval(async () => {
+      if (priceRefreshInFlight) return;
+      priceRefreshInFlight = true;
+
+      try {
+        await fetchPrices();
+        markUpdated();
+        setStatus(true, "онлайн");
+      } catch (e) {
         console.error(e);
         setStatus(false, "ошибка сети");
-      });
+        scheduleNextPriceRefresh();
+      } finally {
+        priceRefreshInFlight = false;
+      }
     }, PRICE_REFRESH_MS);
 
     newsInterval = setInterval(() => {
@@ -230,9 +249,6 @@ function setAutoRefresh(enabled) {
         setStatus(false, "ошибка сети");
       });
     }, NEWS_REFRESH_MS);
-  } else {
-    clearInterval(priceInterval);
-    clearInterval(newsInterval);
   }
 }
 
@@ -241,16 +257,19 @@ async function refreshAll() {
   refreshBtn.textContent = "Обновляю...";
 
   try {
+    priceRefreshInFlight = true;
     await Promise.all([fetchPrices(), fetchNews()]);
     markUpdated();
     setStatus(true, "онлайн");
   } catch (e) {
     console.error(e);
     setStatus(false, "ошибка загрузки");
+    scheduleNextPriceRefresh();
     if (!newsList.children.length) {
       newsList.innerHTML = "<li>Ошибка загрузки данных. Попробуй обновить позже.</li>";
     }
   } finally {
+    priceRefreshInFlight = false;
     refreshBtn.disabled = false;
     refreshBtn.textContent = "Обновить сейчас";
   }
